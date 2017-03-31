@@ -16,7 +16,7 @@ from util import manhattanDistance
 from game import Directions
 import random, util
 import datetime
-import numpy as np
+import math
 
 from game import Agent
 
@@ -98,7 +98,8 @@ class MinimaxAgent(MultiAgentSearchAgent):
       if agent_index == 0:
          if curr_depth == 0:
             #first level
-            choice = np.argmax(np.array(action_outcomes))
+            choice_val = max(action_outcomes)
+            choice = action_outcomes.index(choice_val)
             return action_list[choice]
          else:
             return max(action_outcomes)
@@ -210,12 +211,13 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
       if agent_index == 0:
          if curr_depth == 0:
             #first level
-            choice = np.argmax(np.array(action_outcomes))
+            choice_val = max(action_outcomes)
+            choice = action_outcomes.index(choice_val)
             return action_list[choice]
          else:
             return max(action_outcomes)
       else:
-         total_expect = np.sum(np.array(action_outcomes))
+         total_expect = sum(action_outcomes)
          return total_expect/len(action_outcomes)
         
         
@@ -279,7 +281,6 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       begin = datetime.datetime.utcnow()
       while datetime.datetime.utcnow() - begin < self.calculation_time:
          games += 1
-
       util.raiseNotDefined()
 
    def run_simulation(self, state):
@@ -293,7 +294,55 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       Updates values of appropriate states in search with with evaluation function.
       """
       "*** YOUR CODE HERE ***"
+      
+      
       util.raiseNotDefined()
+
+
+
+   def getLeaf(self, state, agent_index):
+      
+      if state.isLose() or state.isWin():
+         return 0, 0      
+
+      action_list  = state.getLegalActions(agent_index)
+      UCB1 = []
+      n = self.plays[state]
+      
+      next_index = agent_index + 1
+      if next_index >= gameState.getNumAgents():
+         next_index = 0
+
+      child_list[key].isWin()
+      for action in action_list:
+         if action == 'Stop':
+            continue
+         child_list.append(state.generateSuccessor(agent_index, action))
+      
+      child_UCB = {}
+      i = 0
+      for child in child_list:
+         
+         if not child in self.wins:
+            return state, agent_index           
+         score = float(self.wins[child])/float(self.plays[child])
+         score += math.sqrt(2.0*math.loglp(n)/float(self.plays[child]))
+         
+         child_UCB[i] = score
+         i += 1
+         
+      sorted_child = sorted(child_UCB, key = lambda thing: thing[0])
+      for key in sorted_child:
+         if child_list[key].isWin() or child_list[key].isLose():
+            continue
+         else:
+            state_choice, index = getLeaf(child_list[key], next_index) 
+            if state_choice != 0:
+               return state_choice, index
+      
+      return 0, 0
+         
+         
 
    def final(self, state):
       """
