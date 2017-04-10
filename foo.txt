@@ -236,28 +236,16 @@ class MonteCarloAgent(MultiAgentSearchAgent):
            -> Value are integers. When performing division (i.e. wins/plays) don't forget to convert to float.
      """
 
-   def __init__(self, evalFn='mctsEvalFunction', depth='-1', timeout='50', numTraining=100, C='2', Q=None):
+   def __init__(self, evalFn='mctsEvalFunction', depth='-1', timeout='40', numTraining=100, C='2', Q=None):
       # This is where you set C, the depth, and the evaluation function for the section "Enhancements for MCTS agent".
       if Q:
-
-         
          if Q == 'minimaxClassic':
-            evalFn = 'scoreEvaluationFunction'
-            depth = -1
-            C='6'
             pass
          elif Q == 'testClassic':
-            evalFn = 'betterEvaluationFunction'
-            depth = 4
-            C = '2'
             pass
          elif Q == 'smallClassic':
-            evalFn = 'scoreEvaluationFunction'
-            depth = 1
-            C = '5'
             pass
          else: # Q == 'contestClassic'
-            depth = 4
             assert( Q == 'contestClassic' )
             pass
       # Otherwise, your agent will default to these values.
@@ -266,8 +254,6 @@ class MonteCarloAgent(MultiAgentSearchAgent):
          # If using depth-limited UCT, need to set a heuristic evaluation function.
          if int(depth) > 0:
             evalFn = 'scoreEvaluationFunction'
-      
-      self.C = int(C)
       self.states = []
       self.plays = dict()
       self.wins = dict()
@@ -284,25 +270,7 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       You do not need to modify this function. This function is called every time an agent makes a move.
       """
       self.states.append(state)
-      
-   def best_choice(self, state):
-      action_list  = state.getLegalActions(0)
-      if 'Stop' in action_list and len(action_list)>1:
-         action_list.remove('Stop')
 
-   
-      next_index =  1
-      if next_index >= state.getNumAgents():
-         next_index = 0
-
-
-      child_list = [(act, state.generateSuccessor(0, act)) for act in action_list]
-      
-      child_score = [( self.C*float(self.wins.get(child, 0))/float(self.plays.get(child, 1)), act) for (act, child) in child_list]
-         
-      return max(child_score)[1]
-
-      
    def getAction(self, gameState):
       """
       Returns the best action using UCT. Calls runSimulation to update nodes
@@ -310,24 +278,13 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       """
       "*** YOUR CODE HERE ***"
       games = 0
-      
-      acts = gameState.getLegalActions(0)
-      if len(acts) == 1:
-         return acts[0]
-      elif len(acts) == 0:
-         return
-      
       begin = datetime.datetime.utcnow()
       best = 'Stop'
       while datetime.datetime.utcnow() - begin < self.calculation_time:
-         self.run_simulation(gameState)
+         best = self.run_simulation(gameState)
          games += 1
-     
-      return self.best_choice(gameState)
-      
-   
-      
-     
+      return best
+
    def run_simulation(self, state):
       """
       Simulates moves based on MCTS.
@@ -339,105 +296,152 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       Updates values of appropriate states in search with with evaluation function.
       """
       "*** YOUR CODE HERE ***"
+      self.search_path = []
+      self.expand_path = []
+      expand_state, index = self.getLeaf(state, 0)
+      if expand_state == 0:
+         return self.best_choice(state)
+      sim_node, sim_index = self.expand(expand_state, index, 0)
+      if sim_node != 0:
+         self.simulate(sim_node, index)
+         
+      return self.best_choice(state)
+
+
+   def best_choice(self, state):
+      action_list  = state.getLegalActions(0)
+      if 'Stop' in action_list:
+         action_list.remove('Stop')
+      if not state in self.plays:
+         return random.choice(action_list)
       
-      path = []
-      index = 0
-      curr_state = state
-      ret = False
-      na = state.getNumAgents()
-      expand= True
-      depth = 0
-      sim = False
+      UCB1 = []
+      n = self.plays[state] 
+      
+      next_index =  1
+      if next_index >= state.getNumAgents():
+         next_index = 0
+
+
+      child_list = []
+      for action in action_list:
+         child_list.append(state.generateSuccessor(0, action))
+      
+      child_UCB = {}
+      i = 0
+      for child in child_list:
+         
+         if not child in self.wins:
+            child_UCB[i] = 0
+            i+= 1
+            continue           
+         score = float(self.wins[child])/float(self.plays[child])
+         score += math.sqrt(2.0*math.log1p(n)/float(self.plays[child]))
+         
+         child_UCB[i] = score
+         i += 1
+         
+      sorted_child = sorted(child_UCB, key = lambda thing: child_UCB[thing])
+      for key in sorted_child:
+         if child_list[key].isLose():
+            continue
+         else:
+            return action_list[key]
+            
+      return random.choice(action_list)
+      
+         
+   def getLeaf(self, state, agent_index):
+      
+      if not state in self.plays:
+         self.plays[state] = 0
+         self.wins[state] = 0
+         return state, 0
+      
+      if state.isLose() or state.isWin():
+         return 0, 0      
+
+      action_list  = state.getLegalActions(agent_index)
+      UCB1 = []
+      n = self.plays[state]
+      
+      next_index = agent_index + 1
+      if next_index >= state.getNumAgents():
+         next_index = 0
+
+      child_list = []
+      for action in action_list:
+         if action == 'Stop':
+            continue
+         child_list.append(state.generateSuccessor(agent_index, action))
+      
+      child_UCB = {}
+      i = 0
+      for child in child_list:
+         
+         if not child in self.wins:
+            self.search_path.insert(0, state)
+            
+            return state, agent_index           
+         score = float(self.wins[child])/float(self.plays[child])
+         score += math.sqrt(2.0*math.log1p(n)/float(self.plays[child]))
+         
+         child_UCB[i] = score
+         i += 1
+         
+      sorted_child = sorted(child_UCB, key = lambda thing: thing[0])
+      for key in sorted_child:
+         if child_list[key].isWin() or child_list[key].isLose():
+            continue
+         else:
+            state_choice, index = self.getLeaf(child_list[key], next_index) 
+            if state_choice != 0:
+               self.search_path.insert(0, state)
+               return state_choice, index
+      
+      return 0, 0
+         
+   def expand(self, state, agent_index):
+      
+
+      if state.isWin() or state.isLose():
+         if state in self.plays:
+            return 0, 0
+         self.plays[state] = 0
+         self.wins[state] = 0
+         self.expand_path.insert(0, state)
+         self.final(state)
+         return 0, 0
+      
+      action_list = state.getLegalActions(agent_index)
+      if 'Stop' in action_list:
+         action_list.remove('Stop')
+      
+
+      action = random.choice(action_list)
+      return ret_state, ret_index
+         
+      return 0, 0
+      
+
+   def simulate(self, state, agent_index):
+
+      next_index = agent_index + 1
+      if agent_index != 0 and agent_index+1 == state.getNumAgents():
+         next_index = 0
+         
       
       if state.isWin() or state.isLose():
-         return
+         self.final(state)
+         return 
       
-      while True:
-         if index == na and expand == False:
-            depth +=1 
-         
-         if curr_state.isWin() or curr_state.isLose() or depth == self.depth:
-            break
-            
-         index = index % na
-         
-         sum_plays = 0
-         children = []
-         
-         
-         actions = curr_state.getLegalActions(index)
-         for next in actions:
-            if next == 'Stop':
-               continue
-            child = curr_state.generateSuccessor(index, next)
-            if child not in (self.plays) and expand == True:
-               path.append(child)
-               self.plays[child] = 0
-               self.wins[child] = 0
-               expand = False
-               curr_state = child
-               index += 1
-               break
-            children.append([next, curr_state, child])
-            if expand:
-               sum_plays += self.plays[child]
-         
-         if expand == False and sim == False:
-            sim = True
-            continue
-         
-         if expand == True:
-            UCB = []
-            for (act, parent, child) in children:
-               if index == 0:
-                  calc = float(self.wins[child])/float(self.plays[child])
-                  
-               else:
-                  calc = 1 - float(self.wins[child])/float(self.plays[child])
-               calc += self.C*math.sqrt(2*math.log(sum_plays)/self.plays[child])
-               UCB.append((calc, child))
-            
-            while len(UCB) > 0:
-               i = UCB.index(max(UCB))
-               c = children[i][2]
-               if c.isWin() or c.isLose():
-                  path.append(c)
-               path.append(c)
-               curr_state = c
-               index += 1
-               break
-         
-         
-            # if len(UCB) == 0:
-            #    
-            #    if len(path) == 1:
-            #       curr_state = state
-            #       foo = path.pop[0]
-            #    elif len(path) == 0:
-            #       return
-            #    else:
-            #       curr_state = path[-2]
-            #       index = index - 2
-            #       foo = path.pop[-1]
-         else:
-            chosen = random.choice(children)
-            child = chosen[2]
-            curr_state = child
-            index += 1
-               
-      prop_score = self.evaluationFunction(curr_state)
-      for s in path:
-         self.plays[s] += 1
-         self.wins[s] += prop_score
-      # End loop
-         
+      action_list = state.getLegalActions(agent_index)
+      if 'Stop' in action_list and len(action_list) > 1:
+         action_list.remove('Stop')
       
-            
-      
-         
-            
-
-
+      action = random.choice(action_list)
+      self.simulate(state.generateSuccessor(agent_index, action), next_index)
+      return 
       
    def final(self, state):
       """
@@ -445,12 +449,19 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       Updates search tree values of states that were visited during an actual game of pacman.
       """
       "*** YOUR CODE HERE ***"
-      for s in set(self.states):
+      for s in self.search_path:
          if s in self.plays:
             self.plays[s] += 1
-            self.wins[s] += self.evaluationFunction(state)
-      #pass
-     # util.raiseNotDefined()
+            self.wins[s] += state.isWin()
+      for s in self.expand_path:
+         if s in self.plays:
+            self.plays[s] += 1
+            self.wins[s] += state.isWin()
+      return
+      
+      
+      
+      #util.raiseNotDefined()
 
 def mctsEvalFunction(state):
    """
@@ -464,21 +475,7 @@ def betterEvaluationFunction(currentGameState):
      evaluation function (to help improve your UCT MCTS).
    """
    "*** YOUR CODE HERE ***"
-   state = currentGameState
-   score = 0
-   if state.isWin():
-      score += 1
-   elif state.isLose():
-      score = 0
-   else:
-      score = scoreEvaluationFunction(state)/100
-      
-      # terrain = state.getFood()
-      # terrain = str(terrain)
-      # food = terrain.count('F')
-      # score = 1 - food/len(terrain)
-   return score
-   #util.raiseNotDefined()
+   util.raiseNotDefined()
 
 # Abbreviation
 better = betterEvaluationFunction
