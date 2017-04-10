@@ -247,7 +247,7 @@ class MonteCarloAgent(MultiAgentSearchAgent):
             C='6'
             pass
          elif Q == 'testClassic':
-            evalFn = 'betterEvaluationFunction'
+            evalFn = 'scoreEvaluationFunction'
             depth = 4
             C = '2'
             pass
@@ -257,6 +257,8 @@ class MonteCarloAgent(MultiAgentSearchAgent):
             C = '5'
             pass
          else: # Q == 'contestClassic'
+            evalFn = 'betterEvaluationFunction'
+            C = '8'
             depth = 4
             assert( Q == 'contestClassic' )
             pass
@@ -286,20 +288,15 @@ class MonteCarloAgent(MultiAgentSearchAgent):
       self.states.append(state)
       
    def best_choice(self, state):
+      
       action_list  = state.getLegalActions(0)
       if 'Stop' in action_list and len(action_list)>1:
          action_list.remove('Stop')
 
-   
-      next_index =  1
-      if next_index >= state.getNumAgents():
-         next_index = 0
-
-
       child_list = [(act, state.generateSuccessor(0, act)) for act in action_list]
       
-      child_score = [( self.C*float(self.wins.get(child, 0))/float(self.plays.get(child, 1)), act) for (act, child) in child_list]
-         
+      child_score = [(float(self.wins.get(child, -1))/float(self.plays.get(child, 1)), act) for (act, child) in child_list]
+       
       return max(child_score)[1]
 
       
@@ -318,7 +315,7 @@ class MonteCarloAgent(MultiAgentSearchAgent):
          return
       
       begin = datetime.datetime.utcnow()
-      best = 'Stop'
+      
       while datetime.datetime.utcnow() - begin < self.calculation_time:
          self.run_simulation(gameState)
          games += 1
@@ -394,7 +391,7 @@ class MonteCarloAgent(MultiAgentSearchAgent):
                   
                else:
                   calc = 1 - float(self.wins[child])/float(self.plays[child])
-               calc += self.C*math.sqrt(2*math.log(sum_plays)/self.plays[child])
+               calc += self.C*math.sqrt(2*math.log(sum_plays)/float(self.plays[child]))
                UCB.append((calc, child))
             
             while len(UCB) > 0:
@@ -465,19 +462,27 @@ def betterEvaluationFunction(currentGameState):
    """
    "*** YOUR CODE HERE ***"
    state = currentGameState
-   score = 0
-   if state.isWin():
-      score += 1
-   elif state.isLose():
-      score = 0
-   else:
-      score = scoreEvaluationFunction(state)/100
-      
-      # terrain = state.getFood()
-      # terrain = str(terrain)
-      # food = terrain.count('F')
-      # score = 1 - food/len(terrain)
-   return score
+   score = state.getScore()
+
+   pac = state.getPacmanPosition()
+   food = state.getFood()
+   dist_list = []
+   y = 0
+   for row in food:
+      x = 0
+      for node in row:
+         if node == True:
+            dist = abs(pac[0]-x)+abs(pac[1]-y)
+            dist_list.append(dist)
+         x+= 1
+      y += 1
+   if len(dist_list) == 0:
+      dist_list = [0]
+   #terrain = state.getFood()
+   #terrain = str(terrain)
+   #food = terrain.count('F')
+   #score = 10*(1 - food/len(terrain))
+   return score - min(dist_list)
    #util.raiseNotDefined()
 
 # Abbreviation
